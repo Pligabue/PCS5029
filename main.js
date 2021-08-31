@@ -1,6 +1,8 @@
 import tf from "@tensorflow/tfjs-node"
 import fs from "fs"
 
+const MODEL_PATH = "./models/basic_model"
+
 const CHARACTER_SET = "abcdefghijklmnopqrstuvwxyz".split("")
 const ENCODING_SIZE = CHARACTER_SET.length + 1
 const MAX_WORD_SIZE = 15
@@ -8,6 +10,9 @@ const TIME_STEPS = 3
 
 const TAGS = ['WH', 'ADV', 'MOD', 'PRON', 'VERB', 'TO', 'DT', 'ADJ', 'NOUN', 'PREP', 'CONJ', 'NUMB', 'PART', 'AUX']
 const TAG_ENCODING_SIZE = TAGS.length + 1
+
+const MAX_BATCH = 100
+
 
 const oneHotEncodeToken = (token) => {
   const characters = token.toLowerCase().split("")
@@ -83,32 +88,49 @@ const decodeTags = (predictedTensor) => {
   })
 }
 
-const input = tf.input({shape: [TIME_STEPS, MAX_WORD_SIZE * ENCODING_SIZE]})
-
-const rnn = tf.layers.simpleRNN({units: TAG_ENCODING_SIZE, returnSequences: true});
-const output = rnn.apply(input);
-
-const model = tf.model({inputs: input, outputs: output})
-model.compile({optimizer: 'sgd', loss: 'meanSquaredError'});
-
-model.summary()
-
-const data = JSON.parse(fs.readFileSync("data/data.json"))
-
-let i = 0
-for (let {sentence, tags} of data) {
-  let sentenceInputs = buildSentenceInputs(sentence)
-  let tagOutputs = buildTagOutputs(tags)
-
-  if (sentenceInputs.shape[0] === tagOutputs.shape[0]) {
-    await model.fit(sentenceInputs, tagOutputs, {
+let model = null
+if (fs.existsSync(MODEL_PATH)) {
+  model = await tf.loadLayersModel(`file://${MODEL_PATH}/model.json`)
+} else {
+  const input = tf.input({shape: [TIME_STEPS, MAX_WORD_SIZE * ENCODING_SIZE]})
+  
+  const rnn = tf.layers.simpleRNN({units: TAG_ENCODING_SIZE, returnSequences: true});
+  const output = rnn.apply(input);
+  
+  model = tf.model({inputs: input, outputs: output})
+  model.compile({optimizer: 'sgd', loss: 'meanSquaredError'});
+  
+  model.summary()
+  
+  const data = JSON.parse(fs.readFileSync("data/data.json"))
+  
+  for (let i = 0; i < data.length; i += MAX_BATCH) {
+    const batch = data.slice(i, i + MAX_BATCH)
+    let xs, ys
+  
+    batch.forEach(({sentence, tags}, j) => {
+      let sentenceInputs = buildSentenceInputs(sentence)
+      let tagOutputs = buildTagOutputs(tags)
+  
+      if (j == 0) {
+        xs = sentenceInputs
+        ys = tagOutputs
+      } else if (sentenceInputs.shape[0] === tagOutputs.shape[0]) {
+        xs = xs.concat(sentenceInputs)
+        ys = ys.concat(tagOutputs)
+      }
+    })
+  
+    await model.fit(xs, ys, {
       epochs: 100,
       verbose: 0,
       callbacks: {
-        onTrainEnd: (logs) => { console.log(`Ended training #${i++}`) }
+        onTrainEnd: (logs) => { console.log(`Ended training #${i}-${i + batch.length - 1}`) }
       }
     })
   }
+
+  await model.save(`file://${MODEL_PATH}`)
 }
 
 const testModel = (model, sentence) => {
@@ -117,12 +139,12 @@ const testModel = (model, sentence) => {
   const output = model.predict(sentenceInputs)
   const outputTags = decodeTags(output)
   const tokens = sentence.split(/\s+/)
-  output.print()
+
   for (let i = 0; i < tokens.length; i++) {
     console.log(tokens[i], "=>", outputTags[i])
   }
 }
 
-testModel(model, "Hello who are you")
+testModel(model, "The man is a car")
 
 
