@@ -1,4 +1,4 @@
 node_modules/
 venv/
 data/data.json
-models/basic_model
+models/*/
