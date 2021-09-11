@@ -2,39 +2,47 @@ import tf from "@tensorflow/tfjs-node"
 import fs from "fs"
 
 const CHARACTER_SET = "abcdefghijklmnopqrstuvwxyz1234567890".split("")
-const ENCODING_SIZE = CHARACTER_SET.length
+const CHAR_ENCODING_SIZE = CHARACTER_SET.length + 1
 const MAX_WORD_SIZE = 15
-const TIME_STEPS = 25
+const WORD_VECTOR_SIZE = MAX_WORD_SIZE * CHAR_ENCODING_SIZE
 
 const TAGS = ['WH', 'ADV', 'MOD', 'PRON', 'VERB', 'TO', 'DT', 'ADJ', 'NOUN', 'PREP', 'CONJ', 'NUMB', 'PART', 'AUX']
-const TAG_ENCODING_SIZE = TAGS.length
+const TAG_VECTOR_SIZE = TAGS.length + 1
+
+const RNN_SIZE = 60
+const TIME_STEPS = 20
+const EPOCHS = 200
 
 const MAX_BATCH = 1000
-const RNN_SIZE = TAG_ENCODING_SIZE * 3
-const EPOCHS = 100
+
+const MODEL_PATH = `./models/model_${CHAR_ENCODING_SIZE}_${MAX_WORD_SIZE}_${TAG_VECTOR_SIZE}_${RNN_SIZE}_${TIME_STEPS}_${EPOCHS}_${MAX_BATCH}`
 
 const THRESHOLD = 0.0
 
-const MODEL_PATH = `./models/model_${MAX_WORD_SIZE}_${TIME_STEPS}_${RNN_SIZE}_${EPOCHS}`
+const tokenize = (sentence) => {
+  return sentence.split(/\s+/)
+}
 
 const oneHotEncodeToken = (token) => {
   const characters = token.toLowerCase().split("")
-  const characterIndices = characters.map(c => CHARACTER_SET.indexOf(c))
+  const characterIndices = characters.map(c => CHARACTER_SET.indexOf(c) + 1)
   characterIndices.length = MAX_WORD_SIZE
   const characterTensor = tf.tensor1d(characterIndices, "int32")
-  const encodedCharacters = tf.oneHot(characterTensor, ENCODING_SIZE)
-  return encodedCharacters.reshape([MAX_WORD_SIZE * ENCODING_SIZE])
+  const encodedCharacters = tf.oneHot(characterTensor, CHAR_ENCODING_SIZE)
+  return encodedCharacters.reshape([WORD_VECTOR_SIZE])
 }
 
 const encodeSentence = (sentence) => {
-  const tokens = sentence.split(/\s+/)
+  const tokens = tokenize(sentence)
   return tf.stack(tokens.map(oneHotEncodeToken))
 }
 
 const padEncodedSentence = (encodedSentence) => {
   const sentenceLength = encodedSentence.shape[0]
-  const zeros = tf.zeros([TIME_STEPS - sentenceLength, MAX_WORD_SIZE * ENCODING_SIZE], "int32")
-  return zeros.concat(encodedSentence)
+  const zeroArr = Array(TIME_STEPS - sentenceLength).fill("")
+  const zeros = tf.stack(zeroArr.map(oneHotEncodeToken))
+  
+  return encodedSentence.concat(zeros)
 }
 
 const truncateEncodedSentence = (encodedSentence) => {
@@ -48,8 +56,8 @@ const buildSentenceInputs = (sentence) => {
 }
 
 const oneHotEncodeTag = (tag) => {
-  const tag_index = TAGS.indexOf(tag)
-  return tf.oneHot(tag_index, TAG_ENCODING_SIZE)
+  const tag_index = TAGS.indexOf(tag) + 1
+  return tf.oneHot(tag_index, TAG_VECTOR_SIZE)
 }
 
 const encodeTags = (tags) => {
@@ -58,8 +66,10 @@ const encodeTags = (tags) => {
 
 const padEncodedTags = (encodedTags) => {
   const numberOfTags = encodedTags.shape[0]
-  const zeros = tf.zeros([TIME_STEPS - numberOfTags, TAG_ENCODING_SIZE], "int32")
-  return zeros.concat(encodedTags)
+  const zeroArr = Array(TIME_STEPS - numberOfTags).fill("")
+  const zeros = encodeTags(zeroArr)
+  
+  return encodedTags.concat(zeros)
 }
 
 const truncateEncodedTags = (encodedTags) => {
@@ -75,8 +85,8 @@ const buildTagOutputs = (tags) => {
 const decodeOutput = (predictionTensor) => {
   const predictions = predictionTensor.arraySync()
   return predictions.map((prediction) => {
-    const maxIndex = prediction.reduce((max_index, v, i, arr) => (v > arr[max_index] ? i : max_index), 0)
-    return prediction[maxIndex] >= THRESHOLD ? TAGS[maxIndex] : "NO TAG"
+    const maxIndex = prediction.reduce((accIndex, v, i, arr) => (v > arr[accIndex] ? i : accIndex), 1)
+    return maxIndex > 0 ? TAGS[maxIndex - 1] : "NO TAG"
   })
 }
 
@@ -86,12 +96,12 @@ let model = null
 if (fs.existsSync(MODEL_PATH)) {
   model = await tf.loadLayersModel(`file://${MODEL_PATH}/model.json`)
 } else {
-  const input = tf.input({shape: [TIME_STEPS, MAX_WORD_SIZE * ENCODING_SIZE]})
+  const input = tf.input({shape: [TIME_STEPS, WORD_VECTOR_SIZE]})
   
   const rnn = tf.layers.simpleRNN({units: RNN_SIZE, returnSequences: true});
   const rnn_output = rnn.apply(input);
 
-  const denseLayer = tf.layers.dense({units: TAG_ENCODING_SIZE, activation: "softmax"})
+  const denseLayer = tf.layers.dense({units: TAG_VECTOR_SIZE, activation: "softmax"})
   const output = denseLayer.apply(rnn_output)
   
   model = tf.model({inputs: input, outputs: output})
@@ -128,22 +138,42 @@ if (fs.existsSync(MODEL_PATH)) {
   await model.save(`file://${MODEL_PATH}`)
 }
 
-const prettyPrintTest = (sentence, outputTags, expectedTags) => {
-  const tokens = sentence.split(/\s+/)
-  tokens.forEach((token, i) => {
-    console.log(token, "=>", outputTags[TIME_STEPS - tokens.length + i], "expected", expectedTags[i])
-  })
-}
-
-const testModel = (model, sentence, expectedTags) => {
+const testSentence = (model, sentence, expectedTags) => {
   console.log(`Testing sentence "${sentence}"`)
   const sentenceInputs = buildSentenceInputs(sentence)
   const outputs = model.predict(tf.stack([sentenceInputs]))
   const outputTags = decodeOutput(tf.unstack(outputs)[0])
-
-  prettyPrintTest(sentence, outputTags, expectedTags)
+  
+  const tokens = tokenize(sentence)
+  tokens.forEach((token, i) => {
+    console.log(token, "=>", outputTags[i], "expected", expectedTags[i])
+  })
 }
 
-testModel(model, data[1].sentence, data[1].tags)
+const runTests = (model) => {
+  let hits = 0, misses = 0
+  data.forEach(({sentence, tags}) => {
+    const sentenceInputs = buildSentenceInputs(sentence)
+    const outputs = model.predict(tf.stack([sentenceInputs]))
 
+    const tokens = tokenize(sentence)
+    const outputTags = decodeOutput(tf.unstack(outputs)[0])
+
+    tokens.forEach((token, i) => {
+      if (outputTags[i] === tags[i]) {
+        hits++
+      } else {
+        misses++
+      }
+    })
+  })
+
+  const stats = `Hits: ${hits} (${(100 * hits/(hits + misses)).toFixed(2)} %)\n` +
+                `Misses: ${misses} (${(100 * misses/(hits + misses)).toFixed(2)} %)`
+  console.log(stats)
+
+  fs.writeFileSync(`${MODEL_PATH}/stats.txt`, stats)
+}
+
+runTests(model)
 
