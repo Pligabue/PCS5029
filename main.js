@@ -4,14 +4,14 @@ import fs from "fs"
 const CHARACTER_SET = "abcdefghijklmnopqrstuvwxyz1234567890".split("")
 const ENCODING_SIZE = CHARACTER_SET.length
 const MAX_WORD_SIZE = 15
-const TIME_STEPS = 100
+const TIME_STEPS = 25
 
 const TAGS = ['WH', 'ADV', 'MOD', 'PRON', 'VERB', 'TO', 'DT', 'ADJ', 'NOUN', 'PREP', 'CONJ', 'NUMB', 'PART', 'AUX']
 const TAG_ENCODING_SIZE = TAGS.length
 
 const MAX_BATCH = 1000
-const RNN_SIZE = 64
-const EPOCHS = 10
+const RNN_SIZE = TAG_ENCODING_SIZE * 3
+const EPOCHS = 100
 
 const THRESHOLD = 0.0
 
@@ -80,7 +80,9 @@ const decodeOutput = (predictionTensor) => {
   })
 }
 
+const data = JSON.parse(fs.readFileSync("data/data.json"))
 let model = null
+
 if (fs.existsSync(MODEL_PATH)) {
   model = await tf.loadLayersModel(`file://${MODEL_PATH}/model.json`)
 } else {
@@ -93,11 +95,10 @@ if (fs.existsSync(MODEL_PATH)) {
   const output = denseLayer.apply(rnn_output)
   
   model = tf.model({inputs: input, outputs: output})
-  model.compile({optimizer: 'sgd', loss: 'meanSquaredError'});
+  model.compile({optimizer: 'adam', loss: tf.losses.cosineDistance});
   
   model.summary()
   
-  const data = JSON.parse(fs.readFileSync("data/data.json"))
   
   for (let i = 0; i < data.length; i += MAX_BATCH) {
     const batch = data.slice(i, i + MAX_BATCH)
@@ -110,6 +111,8 @@ if (fs.existsSync(MODEL_PATH)) {
       if (sentenceInputs.shape[0] === tagOutputs.shape[0]) {
         xs.push(sentenceInputs)
         ys.push(tagOutputs)
+      } else {
+        console.log(sentence, tags)
       }
     })
   
@@ -125,15 +128,22 @@ if (fs.existsSync(MODEL_PATH)) {
   await model.save(`file://${MODEL_PATH}`)
 }
 
-const testModel = (model, sentence) => {
+const prettyPrintTest = (sentence, outputTags, expectedTags) => {
+  const tokens = sentence.split(/\s+/)
+  tokens.forEach((token, i) => {
+    console.log(token, "=>", outputTags[TIME_STEPS - tokens.length + i], "expected", expectedTags[i])
+  })
+}
+
+const testModel = (model, sentence, expectedTags) => {
   console.log(`Testing sentence "${sentence}"`)
   const sentenceInputs = buildSentenceInputs(sentence)
   const outputs = model.predict(tf.stack([sentenceInputs]))
   const outputTags = decodeOutput(tf.unstack(outputs)[0])
 
-  console.log(outputTags)
+  prettyPrintTest(sentence, outputTags, expectedTags)
 }
 
-testModel(model, "The man is a car")
+testModel(model, data[1].sentence, data[1].tags)
 
 
