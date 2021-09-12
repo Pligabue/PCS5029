@@ -1,23 +1,28 @@
 import tf from "@tensorflow/tfjs-node"
 import fs from "fs"
 
+// WORDS (INPUT)
 const CHARACTER_SET = "abcdefghijklmnopqrstuvwxyz1234567890".split("")
 const CHAR_ENCODING_SIZE = CHARACTER_SET.length + 1
 const MAX_WORD_SIZE = 15
 const WORD_VECTOR_SIZE = MAX_WORD_SIZE * CHAR_ENCODING_SIZE
 
+// TAGS (OUTPUT)
 const TAGS = ['WH', 'ADV', 'MOD', 'PRON', 'VERB', 'TO', 'DT', 'ADJ', 'NOUN', 'PREP', 'CONJ', 'NUMB', 'PART', 'AUX']
 const TAG_VECTOR_SIZE = TAGS.length + 1
 
-const RNN_SIZE = 60
-const TIME_STEPS = 20
-const EPOCHS = 200
+// DEFAULT HYPERPARAMETERS
+let RNN_SIZE = 60
+let TIME_STEPS = 20
+let EPOCHS = 200
 
+// IN CASE OF MEMORY PROBLEMS
 const MAX_BATCH = 1000
 
-const MODEL_PATH = `./models/model_${CHAR_ENCODING_SIZE}_${MAX_WORD_SIZE}_${TAG_VECTOR_SIZE}_${RNN_SIZE}_${TIME_STEPS}_${EPOCHS}_${MAX_BATCH}`
-
 const THRESHOLD = 0.0
+
+// DATA
+const DATA = JSON.parse(fs.readFileSync("data/data.json"))
 
 const tokenize = (sentence) => {
   return sentence.split(/\s+/)
@@ -90,55 +95,64 @@ const decodeOutput = (predictionTensor) => {
   })
 }
 
-const data = JSON.parse(fs.readFileSync("data/data.json"))
-let model = null
+export const getModel = async ({rnnSize = RNN_SIZE, timeSteps = TIME_STEPS, epochs = EPOCHS}) => {
+  RNN_SIZE = rnnSize
+  TIME_STEPS = timeSteps
+  EPOCHS = epochs
 
-if (fs.existsSync(MODEL_PATH)) {
-  model = await tf.loadLayersModel(`file://${MODEL_PATH}/model.json`)
-} else {
-  const input = tf.input({shape: [TIME_STEPS, WORD_VECTOR_SIZE]})
-  
-  const rnn = tf.layers.simpleRNN({units: RNN_SIZE, returnSequences: true});
-  const rnn_output = rnn.apply(input);
+  const modelPath = `./models/model_${CHAR_ENCODING_SIZE}_${MAX_WORD_SIZE}_${TAG_VECTOR_SIZE}_${RNN_SIZE}_${TIME_STEPS}_${EPOCHS}_${MAX_BATCH}`
 
-  const denseLayer = tf.layers.dense({units: TAG_VECTOR_SIZE, activation: "softmax"})
-  const output = denseLayer.apply(rnn_output)
+  let model = null
+
+  if (fs.existsSync(modelPath)) {
+    model = await tf.loadLayersModel(`file://${modelPath}/model.json`)
+  } else {
+    const input = tf.input({shape: [TIME_STEPS, WORD_VECTOR_SIZE]})
+    
+    const rnn = tf.layers.simpleRNN({units: RNN_SIZE, returnSequences: true});
+    const rnn_output = rnn.apply(input);
   
-  model = tf.model({inputs: input, outputs: output})
-  model.compile({optimizer: 'adam', loss: tf.losses.cosineDistance});
+    const denseLayer = tf.layers.dense({units: TAG_VECTOR_SIZE, activation: "softmax"})
+    const output = denseLayer.apply(rnn_output)
+    
+    model = tf.model({inputs: input, outputs: output})
+    model.compile({optimizer: 'adam', loss: tf.losses.cosineDistance});
+    
+    model.summary()
+    
+    
+    for (let i = 0; i < DATA.length; i += MAX_BATCH) {
+      const batch = DATA.slice(i, i + MAX_BATCH)
+      let xs = [], ys = []
+    
+      batch.forEach(({sentence, tags}, j) => {
+        let sentenceInputs = buildSentenceInputs(sentence)
+        let tagOutputs = buildTagOutputs(tags)
+    
+        if (sentenceInputs.shape[0] === tagOutputs.shape[0]) {
+          xs.push(sentenceInputs)
+          ys.push(tagOutputs)
+        } else {
+          console.log(sentence, tags)
+        }
+      })
+    
+      await model.fit(tf.stack(xs), tf.stack(ys), {
+        epochs: EPOCHS,
+        verbose: 0,
+        callbacks: {
+          onTrainEnd: (logs) => { console.log(`Ended training #${i}-${i + batch.length - 1}`) }
+        }
+      })
+    }
   
-  model.summary()
-  
-  
-  for (let i = 0; i < data.length; i += MAX_BATCH) {
-    const batch = data.slice(i, i + MAX_BATCH)
-    let xs = [], ys = []
-  
-    batch.forEach(({sentence, tags}, j) => {
-      let sentenceInputs = buildSentenceInputs(sentence)
-      let tagOutputs = buildTagOutputs(tags)
-  
-      if (sentenceInputs.shape[0] === tagOutputs.shape[0]) {
-        xs.push(sentenceInputs)
-        ys.push(tagOutputs)
-      } else {
-        console.log(sentence, tags)
-      }
-    })
-  
-    await model.fit(tf.stack(xs), tf.stack(ys), {
-      epochs: EPOCHS,
-      verbose: 0,
-      callbacks: {
-        onTrainEnd: (logs) => { console.log(`Ended training #${i}-${i + batch.length - 1}`) }
-      }
-    })
+    await model.save(`file://${modelPath}`)
   }
 
-  await model.save(`file://${MODEL_PATH}`)
+  return [model, modelPath]
 }
 
-const testSentence = (model, sentence, expectedTags) => {
+export const testSentence = (model, sentence, expectedTags) => {
   console.log(`Testing sentence "${sentence}"`)
   const sentenceInputs = buildSentenceInputs(sentence)
   const outputs = model.predict(tf.stack([sentenceInputs]))
@@ -150,9 +164,10 @@ const testSentence = (model, sentence, expectedTags) => {
   })
 }
 
-const runTests = (model) => {
+export const runTests = (model, modelPath) => {
   let hits = 0, misses = 0
-  data.forEach(({sentence, tags}) => {
+
+  DATA.forEach(({sentence, tags}) => {
     const sentenceInputs = buildSentenceInputs(sentence)
     const outputs = model.predict(tf.stack([sentenceInputs]))
 
@@ -172,8 +187,6 @@ const runTests = (model) => {
                 `Misses: ${misses} (${(100 * misses/(hits + misses)).toFixed(2)} %)`
   console.log(stats)
 
-  fs.writeFileSync(`${MODEL_PATH}/stats.txt`, stats)
+  fs.writeFileSync(`${modelPath}/stats.txt`, stats)
 }
-
-runTests(model)
 

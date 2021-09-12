@@ -2,3 +2,4 @@ node_modules/
 venv/
 data/data.json
 models/*/
+stats.*
