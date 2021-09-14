@@ -1,0 +1,31 @@
+Sentence,Expected Tags,Predicted Tags,Ratio
+"where are you?",WH AUX PRON,WH AUX PRON,1.00
+"where are you going to?",WH AUX PRON VERB TO,WH AUX PRON VERB TO,1.00
+"who is that person?",WH AUX DT NOUN,WH AUX DT NOUN,1.00
+"What type of dog is that?",WH NOUN PREP NOUN AUX DT,WH NOUN PREP NOUN AUX DT,1.00
+"Whom is that letter for?",WH AUX DT NOUN PREP,WH AUX DT NOUN PREP,1.00
+"But why would he do that?",CONJ WH MOD PRON AUX DT,PREP WH NOUN VERB AUX VERB,0.33
+"what is the airspeed velocity of an unladen swallow?",WH AUX DT ADJ NOUN PREP DT ADJ NOUN,WH AUX DT ADJ NOUN PREP DT NOUN NOUN,0.89
+"what famous musician was born in 1940?",WH ADJ NOUN AUX VERB PREP NUMB,WH ADJ NOUN AUX VERB PREP NUMB,1.00
+"Should I stay or should I go?",MOD PRON VERB CONJ MOD PRON VERB,NOUN AUX NOUN AUX NOUN AUX NOUN,0.00
+"Where should I go?",WH MOD PRON VERB,WH NOUN AUX VERB,0.50
+"Where to?",WH TO,WH TO,1.00
+"Whose car is this?",WH NOUN AUX DT,WH NOUN AUX DT,1.00
+"What is the point of even trying?",WH AUX DT NOUN PREP ADV VERB,WH AUX DT NOUN PREP NOUN NOUN,0.71
+"To whom do I owe the pleasure?",TO WH AUX PRON VERB DT NOUN,TO WH AUX PRON VERB DT NOUN,1.00
+"I went to the living room",PRON VERB TO DT ADJ NOUN,PRON ADJ TO DT ADJ NOUN,0.83
+"The air I breathe",DT NOUN PRON VERB,DT ADJ PREP NOUN,0.25
+"Standing on the shoulders of giants",VERB PREP DT NOUN PREP NOUN,NOUN PREP DT NOUN PREP NOUN,0.83
+"Where is this place you can't stop talking about?",WH AUX DT NOUN PRON MOD VERB VERB PREP,WH AUX DT NOUN PREP VERB NOUN VERB PREP,0.67
+"What is in the box?",WH AUX PREP DT NOUN,WH AUX PREP DT NOUN,1.00
+"To be or not to be",TO AUX CONJ ADV TO VERB,TO VERB PREP VERB TO VERB,0.50
+"Where is that restaurant we went to last week?",WH AUX DT NOUN PRON VERB TO ADJ NOUN,WH AUX DT NOUN PREP ADJ TO VERB NOUN,0.67
+"How are you doing?",WH AUX PRON VERB,WH AUX PRON VERB,1.00
+"How long have you been doing this for?",WH ADJ AUX PRON AUX VERB DT PREP,WH ADJ VERB PRON VERB NOUN NOUN PREP,0.50
+"How do I get to the town hall?",WH AUX PRON VERB TO DT ADJ NOUN,WH AUX PRON VERB TO DT NOUN VERB,0.75
+"How would you rate your meal?",WH MOD PRON VERB DT NOUN,WH VERB PRON VERB PREP NOUN,0.67
+"How did you get here?",WH AUX PRON VERB ADV,WH AUX PRON VERB ADJ,0.80
+"What do you do on your free time?",WH AUX PRON VERB PREP DT ADJ NOUN,WH AUX PRON AUX PREP PRON NOUN NOUN,0.63
+"What time is it?",WH NOUN AUX PRON,WH NOUN AUX PRON,1.00
+"I am late for my meeting",PRON VERB ADJ PREP DT NOUN,PRON DT NOUN PREP VERB ADJ,0.33
+"Why did you do that?",WH AUX PRON VERB DT,WH AUX PRON AUX NOUN,0.60

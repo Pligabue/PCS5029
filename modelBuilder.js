@@ -162,6 +162,8 @@ export const testSentence = (model, sentence, expectedTags) => {
   tokens.forEach((token, i) => {
     console.log(token, "=>", outputTags[i], "expected", expectedTags[i])
   })
+
+  return outputTags
 }
 
 export const runTests = (model, modelPath) => {
